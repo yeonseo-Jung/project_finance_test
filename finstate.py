@@ -114,8 +114,11 @@ def finstate_all_account(corp_name, years, quarters):
                 fstate = dart.finstate_all(corp_name, bsns_year, reprt_code, fs_div="CFS")
                 fstate = finstate_quarter(fstate).rename(columns={"thstrm_amount": f'thstrm_amount_{bsns_year}_{quarter}'})
                 # stock_name, stock_code columns 삽입
-                stock_code = dart.company(corp_name)["stock_code"]
                 fstate.insert(0, "stock_name", corp_name)
+                if dart.company(corp_name)["corp_cls"] == "Y":
+                    stock_code = dart.company(corp_name)["stock_code"] + ".KS"
+                elif dart.company(corp_name)["corp_cls"] == "K":
+                    stock_code = dart.company(corp_name)["stock_code"] + ".KQ"
                 fstate.insert(1, "stock_code", stock_code)
                 # 계정과목 이름이 중복되는 행 삭제
                 fstate = fstate.drop_duplicates(["sj_div", "account_id", "account_nm"], keep=False, ignore_index=True)
