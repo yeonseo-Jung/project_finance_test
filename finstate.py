@@ -1,15 +1,25 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# In[1]:
+# In[135]:
 
 
-import pandas as pd
 import requests
-from io import BytesIO
+import zipfile
+import io
+import os
+import json
+import pandas as pd
+import xml.etree.ElementTree as ET
+from datetime import datetime, timedelta
+
+try:
+    from pandas import json_normalize
+except ImportError:
+    from pandas.io.json import json_normalize
 
 
-# In[106]:
+# In[17]:
 
 
 import OpenDartReader
@@ -17,7 +27,7 @@ api_key = "ef3149d745caee09f48df5004b905ec4ef3f5d7e"
 dart = OpenDartReader(api_key)
 
 
-# In[3]:
+# In[9]:
 
 
 # CIS 계정과목 id
@@ -48,13 +58,46 @@ dart = OpenDartReader(api_key)
 """
 
 
-# In[4]:
+# In[10]:
 
 
 # 1분기보고서 : "11013", 반기보고서 : "11012", 3분기보고서 : "11014", 사업보고서 : "11011"
 
 
-# In[3]:
+# In[136]:
+
+
+def corp_codes(api_key):
+        url = 'https://opendart.fss.or.kr/api/corpCode.xml'
+        params = { 'crtfc_key': api_key, }
+
+        r = requests.get(url, params=params)
+        try:
+            tree = ET.XML(r.content)
+            status = tree.find('status').text
+            message = tree.find('message').text
+            if status != '000':
+                raise ValueError({'status': status, 'message': message})
+        except ET.ParseError as e:
+            pass
+
+        zf = zipfile.ZipFile(io.BytesIO(r.content))
+        xml_data = zf.read('CORPCODE.xml')
+
+        # XML to DataFrame
+        tree = ET.XML(xml_data)
+        all_records = []
+
+        element = tree.findall('list')
+        for i, child in enumerate(element):
+            record = {}
+            for i, subchild in enumerate(child):
+                record[subchild.tag] = subchild.text
+            all_records.append(record)
+        return pd.DataFrame(all_records)
+
+
+# In[54]:
 
 
 # 재무제표를 종류별로 분류하여 각각 DataFrame으로 return 해주는 함수
@@ -81,7 +124,7 @@ def finstate_classify(finstate):
     return finstate_bs, finstate_is, finstate_cis, finstate_cf, finstate_sce
 
 
-# In[4]:
+# In[55]:
 
 
 # 분기별 제무재표 데이터를 필요한 columns만 추출해서 table에 할당하여 return 
@@ -103,10 +146,10 @@ def finstate_quarter(finstate_df):
         return None
 
 
-# In[176]:
+# In[112]:
 
 
-# 각 연도마다 분기별 재무제표를 dataframe에 할당
+# 분기별 재무제표를 병합해서 DataFrame으로 return 해주는 함수 
 def finstate_all_account(stock_name, years, quarters):
     for bsns_year in years:
         quarter = 1
@@ -158,59 +201,35 @@ def finstate_all_account(stock_name, years, quarters):
                 fstate_all_account = fstate_all_account.merge(fstate_corp, how="outer", on=["stock_name", "stock_code", "corp_code", "sj_div", "account_id", "account_nm"], suffixes=("", ""))
         except (ValueError, UnboundLocalError):
             fstate_all_account = fstate_corp
-    # NULL 데이터를 0으로 바꿈
+    # NULL 데이터를 0으로 바꿈 (나중에 row 데이터에 대해 벡터 합을 계산할 때를 위한 작업)
     fstate_all_account = fstate_all_account.fillna(0)
     # 엑셀파일로 저장
     fstate_all_account.to_excel(f"{stock_code}.xlsx")
     return fstate_all_account
 
 
-# In[205]:
+# In[58]:
 
 
-def find_amounts(finstate, account, accounts):
-    columns = list(finstate.columns)
-    df = pd.DataFrame(columns=columns)
-    i = 0
-    for s in finstate["account_id"]:
-        # 찾고자 하는 계정과목id 이면 df에 추가 
-        if s in accounts[account]:
-            df = df.append(finstate.loc[i], ignore_index=True)
-        i += 1
-    if len(df) == 0:
-        return None
-    else:
-        # df의 각 row값을 합치기(병합개녕이 아니라 plus)
-        for i in range(len(df)):
-            if i == 0:
-                df_tot = df.loc[i]
-            else:
-                df_tot += df.loc[i]
-        return list(df_tot)
-
-
-# In[221]:
-
-
-# stock_info table에 회사정보 추가하는 함수 
+# stock_info 테이블에 기업개황을 추가하는 함수 
 def append_stock_info(stock_infos, stock_name):
-    if stock_name in stock_info["stock_name"]:
+    if stock_name in stock_infos["stock_name"]:
         pass
     else:
         if dart.company(stock_name)["corp_cls"] == "Y":
             stock_code = dart.company(stock_name)["stock_code"] + ".KS"
+            corp_code = str(dart.find_corp_code(stock_name)) + ".KS"
         elif dart.company(stock_name)["corp_cls"] == "K":
             stock_code = dart.company(stock_name)["stock_code"] + ".KQ"
+            corp_code = str(dart.find_corp_code(stock_name)) + ".KQ"
         stock_name = dart.company(stock_name)["stock_name"]
-        corp_code = str(dart.find_corp_code(stock_name))
-        
+        #stock_infos에 info 데이터 추가(append)
         info = [(stock_code, stock_name, corp_code)]
         info_df = pd.DataFrame(info, columns=["stock_code", "stock_name", "corp_code"])
         stock_infos = stock_infos.append(info_df, ignore_index=True)
-    return stock_infos
 
 
-# In[200]:
+# In[59]:
 
 
 def find_stock_code(stock_infos, stock_name):
@@ -221,18 +240,52 @@ def find_stock_code(stock_infos, stock_name):
             break
         i += 1
     if i == len(stock_infos):
-        stock_code = "종목 코드를 찾을 수 없습니다."
+        stock_code = None
+        print("종목 코드를 찾을 수 없습니다.")
     return stock_code
 
 
-# In[202]:
+# In[61]:
 
 
-# 단일회사 재무제표 table에서 특정 계정과목의 금액 추출하여 새로운 table 생성하는 함수
-def append_amounts(account_df, stock_name, account): 
+def read_xlsx(file_name):
+    table = pd.read_excel(f"{file_name}.xlsx")
+    table = table.drop(columns="Unnamed: 0")
+    return table
+
+
+# In[130]:
+
+
+# 재무제표 테이블에서 원하는 계정과목의 금액을 추출해서 리스트로 반환해주는 함수
+def find_amounts(finstate, account, accounts):
+    columns = list(finstate.columns)
+    df = pd.DataFrame(columns=columns)
+    i = 0
+    for s in finstate["account_id"]:
+        # 찾고자 하는 계정과목id 이면 df에 추가 
+        if s in accounts[account]:
+            df = df.append(finstate.loc[i], ignore_index=True)
+        i += 1
+    if len(df) == 0:
+        return [None] * len(finstate.columns)
+    else:
+        # df의 각 row값을 벡터 합 시키기
+        for i in range(len(df)):
+            if i == 0:
+                df_tot = df.loc[i]
+            else:
+                df_tot += df.loc[i]
+        return list(df_tot)
+
+
+# In[113]:
+
+
+# 재무제표 테이블에서 특정 계정과목의 금액 추출하여 다중회사의 특정 계정과목 테이블에 데이터를 추가하는 함수
+def append_amounts(account_df, stock_infos, stock_name, account, accounts): 
     stock_code = find_stock_code(stock_infos, stock_name)
-    fstate_all_account = pd.read_excel(f"{stock_code}.xlsx")
-    fstate_all_account = fstate_all_account.drop(columns="Unnamed: 0")
+    fstate_all_account = read_xlsx(stock_code)
     # columns
     columns = list(account_df.columns)
     columns_infos = columns[:3]
@@ -244,19 +297,45 @@ def append_amounts(account_df, stock_name, account):
     data = tuple(infos + amounts)
     data_df = pd.DataFrame([data], columns=columns)
     account_df = account_df.append(data_df, ignore_index=True)
+    
     return account_df
 
 
-# In[196]:
+# In[134]:
+
+
+# account table에서 누락된 데이터의 (row, columns) 찾기 
+def find_zero_null(df, columns_quarters):
+    zero_row_columns = []
+    null_row_columns = []
+    for quarter in columns_quarters:
+        i = 0
+        for amount in df[quarter]:
+            if amount == None:
+                null_row_columns.append([i, quarter])
+            elif abs(amount) == 0:
+                zero_row_columns.append([i, quarter])
+            i += 1
+    return zero_row_columns, null_row_columns
+
+
+# In[129]:
+
+
+stock_names = ["삼성전자", "SK하이닉스", "현대자동차", "현대모비스", "엔씨소프트", "원익IPS", "휴젤"]
+
+
+# In[128]:
 
 
 years = ["2021", "2020", "2019", "2018", "2017"]
 quarters = ["11013", "11012", "11014", "11011"]
-stock_names = ["삼성전자", "SK하이닉스", "현대자동차", "현대모비스", "엔씨소프트", "원익IPS", "휴젤"]
-accounts = {}
-accounts["equity"] = ["ifrs_EquityAttributableToOwnersOfParent", "ifrs-full_EquityAttributableToOwnersOfParent"]
-accounts["profit"] = ["ifrs_ProfitLossAttributableToOwnersOfParent", "ifrs-full_ProfitLossAttributableToOwnersOfParent"]
-columns_infos = ["stock_name", "stock_code", "corp_code"]
+
+
+# In[63]:
+
+
+columns_infos = ["stock_code", "stock_name", "corp_code"]
 columns_quarters = [
  'thstrm_amount_2021_1',
  'thstrm_amount_2021_2',
@@ -279,46 +358,66 @@ columns_quarters = [
 ]
 
 
-# In[225]:
+# In[64]:
 
 
-stock_infos = pd.DataFrame(columns=columns_infos)
+accounts = {}
+accounts["equity"] = ["ifrs_EquityAttributableToOwnersOfParent", "ifrs-full_EquityAttributableToOwnersOfParent"]
+accounts["profit"] = ["ifrs_ProfitLossAttributableToOwnersOfParent", "ifrs-full_ProfitLossAttributableToOwnersOfParent"]
 
 
-# In[208]:
+# In[91]:
 
 
 profit_df = pd.DataFrame(columns=columns_infos+columns_quarters)
 equity_df = pd.DataFrame(columns=columns_infos+columns_quarters)
 
 
-# In[226]:
+# In[66]:
 
 
-for stock_name in stock_names:    
-    stock_infos = append_stock_info(stock_infos, stock_name)
+stock_infos = read_xlsx("stock_infos")
 
 
-# In[209]:
+# In[105]:
 
 
+# profit_df, equity_table 만들기
 for stock_name in stock_names: 
-    try:
-        profit_df = append_amounts(profit_df, stock_name, "profit")
-        equity_df = append_amounts(equity_df, stock_name, "equity")
-    except TypeError:
-        continue
+    profit_df = append_amounts(profit_df, stock_infos, stock_name, "profit", accounts)
+    equity_df = append_amounts(equity_df, stock_infos, stock_name, "equity", accounts)
 
 
-# In[55]:
+# In[ ]:
 
 
-# account table에서 결측 데이터 찾기 
-zero_row_columns = []
-for quarter in columns_quarters:
-    i = 0
-    for amount in fstate_core_account[quarter]:
-        if abs(amount) == 0:
-            zero_row_columns.append([i, quarter])
-        i += 1
+corps = corp_codes(api_key)
+
+# corps에서 stock_code가 존재하는 회사만 stock_codes table에 할당
+stock_codes = pd.DataFrame()
+i = 0
+for s in corps["stock_code"]:
+    if len(s) == 6:
+        stock_codes = stock_codes.append(corps.loc[i], ignore_index=True)
+    i += 1
+
+# stock_codes에서 코스피, 코스닥 시장에 상장된 회사들만 stock_infos table에 할당
+columns_infos = ["stock_code", "stock_name", "corp_code"]
+stock_infos = pd.DataFrame(columns=columns_infos)
+i = 0
+for s in stock_codes["corp_name"]:
+    market = dart.company(s)["corp_cls"]
+    if market == "Y":
+        stock_code = stock_codes.loc[i, "stock_code"] + ".KS"
+        stock_name = stock_codes.loc[i, "corp_name"]
+        corp_code = stock_codes.loc[i, "corp_code"] + ".KS"
+        infos = pd.DataFrame([(stock_code, stock_name, corp_code)], columns=columns_infos)
+        stock_infos = stock_infos.append(infos, ignore_index=True)
+    elif market == "K":
+        stock_code = stock_codes.loc[i, "stock_code"] + ".KQ"
+        stock_name = stock_codes.loc[i, "corp_name"]
+        corp_code = stock_codes.loc[i, "corp_code"] + ".KQ"
+        infos = pd.DataFrame([(stock_code, stock_name, corp_code)], columns=columns_infos)
+        stock_infos = stock_infos.append(infos, ignore_index=True)  
+    i += 1
 
