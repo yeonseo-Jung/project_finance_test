@@ -14,7 +14,7 @@ import OpenDartReader
 
 
 # 재무제표를 종류별로 분류하여 각각 DataFrame으로 return 해주는 함수
-def fstate_classify(finstate):
+def finstate_classify(finstate):
     try:
         # 금액 관련 columns의 자료형을 object에서 float으로 변경
         amounts = ["thstrm_amount", "thstrm_add_amount", "frmtrm_amount", "frmtrm_q_amount", "frmtrm_add_amount"]
@@ -43,22 +43,18 @@ def fstate_classify(finstate):
             i += 1    
         
         a = [fstate_bs, fstate_is, fstate_cis, fstate_cf, fstate_sce]
-        finstates = {}
-        i = 0
+        finstates = []
         for fs in a:
             if len(fs) == 0:
                 pass
             else:
-                finstates[a[i]] = fs
-            i += 1
+                finstates.append(fs)
+    
                 
         return finstates
     
-    except AttributeError:
+    except TypeError:
         return None
-
-
-# In[219]:
 
 
 # 단일회사 분기별 전체 재무제표를 종류별로 할당해서 엑셀로 저장해주는 함수 
@@ -78,8 +74,6 @@ def finstate_all(api_key, stock_name, stock_code, bsns_year, reprt_code, path):
             kind = kind.lower()
             fs.to_excel(f"{path}/{stock_code}_{kind}_{bsns_year}_{reprt_code}.xlsx")
            
-
-
 # In[220]:
 
 
@@ -116,4 +110,4 @@ def make_accounts(account_nm, account_id, path):
 
     # 기존에 등록되어 있는 계정과목의 id추가 
     else:
-        accounts[account_nm].append(account_id)
+        accounts[account_nm].append(account_id)     

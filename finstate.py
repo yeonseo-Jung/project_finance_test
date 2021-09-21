@@ -10,7 +10,8 @@ class FinanceStatement:
             finstate_tables.finstate_all(api_key, stock_name, stock_code, bsns_year, reprt_code, path)
 
         except FileExistsError:
-            finstate_tables.finstate_all(api_key, stock_name, stock_code, bsns_year, reprt_code, path)
+            path_tables = f'{path}/{stock_code}'
+            finstate_tables.finstate_all(api_key, stock_name, stock_code, bsns_year, reprt_code, path_tables)
         
 
 
