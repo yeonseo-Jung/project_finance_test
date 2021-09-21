@@ -4,13 +4,13 @@ from . import finstate_tables
 
 class FinanceStatement:
     
-    def finstate_all(self, stock_name, stock_code, bsns_year, reprt_code, path):
+    def finstate_all(self, api_key, stock_name, stock_code, bsns_year, reprt_code, path):
         try:
             os.mkdir(f'{path}/{stock_code}')
-            finstate_tables.finstate_all(stock_name, stock_code, bsns_year, reprt_code, path)
+            finstate_tables.finstate_all(api_key, stock_name, stock_code, bsns_year, reprt_code, path)
 
         except FileExistsError:
-            finstate_tables.finstate_all(stock_name, stock_code, bsns_year, reprt_code, path)
+            finstate_tables.finstate_all(api_key, stock_name, stock_code, bsns_year, reprt_code, path)
         
 
 

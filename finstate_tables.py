@@ -6,14 +6,8 @@
 
 import pandas as pd
 import os
-
-
-# In[217]:
-
-
 import OpenDartReader
-api_key = "ef3149d745caee09f48df5004b905ec4ef3f5d7e"
-dart = OpenDartReader(api_key)
+
 
 
 # In[218]:
@@ -68,7 +62,8 @@ def fstate_classify(finstate):
 
 
 # 단일회사 분기별 전체 재무제표를 종류별로 할당해서 엑셀로 저장해주는 함수 
-def finstate_all(stock_name, stock_code, bsns_year, reprt_code, path):
+def finstate_all(api_key, stock_name, stock_code, bsns_year, reprt_code, path):
+    dart = OpenDartReader(api_key)
     # dart api에서 단일회사 전체 재무제표 호출한 후 종류별로 분류해서 dataframe에 할당
     fstate = dart.finstate_all(stock_name, bsns_year, reprt_code, fs_div="CFS")
     fstates = finstate_classify(fstate)
