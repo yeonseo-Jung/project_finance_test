@@ -1,16 +1,19 @@
-#!/usr/bin/env python
-# coding: utf-8
-
-# In[216]:
-
-
 import pandas as pd
 import os
+import requests
+import zipfile
+import io
+import json
+import xml.etree.ElementTree as ET
+from datetime import datetime, timedelta
 import OpenDartReader
 
+try:
+    from pandas import json_normalize
+except ImportError:
+    from pandas.io.json import json_normalize
 
 
-# In[218]:
 
 
 # 재무제표를 종류별로 분류하여 각각 DataFrame으로 return 해주는 함수
@@ -74,17 +77,12 @@ def finstate_all(api_key, stock_name, stock_code, bsns_year, reprt_code, path):
             kind = kind.lower()
             fs.to_excel(f"{path}/{stock_code}_{kind}_{bsns_year}_{reprt_code}.xlsx")
            
-# In[220]:
-
-
 # 저장된 엑셀파일을 읽어들여 dataframe에 할당하여 출력해주는 함수
 def read_xlsx(file_name):
     table = pd.read_excel(f"{file_name}.xlsx")
     table = table.drop(columns="Unnamed: 0")
     return table
 
-
-# In[221]:
 
 # 새로운 계정과목 {nm: id} 등록
 # 기존에 등록되어 있는 계정과목의 id추가 
@@ -111,3 +109,36 @@ def make_accounts(account_nm, account_id, path):
     # 기존에 등록되어 있는 계정과목의 id추가 
     else:
         accounts[account_nm].append(account_id)     
+
+
+# dart에 공시되어 있는 모든 회사들의 기업개황을 dataframe에 할당하는 함수
+def corp_codes(api_key):
+        url = 'https://opendart.fss.or.kr/api/corpCode.xml'
+        params = { 'crtfc_key': api_key, }
+
+        r = requests.get(url, params=params)
+        try:
+            tree = ET.XML(r.content)
+            status = tree.find('status').text
+            message = tree.find('message').text
+            if status != '000':
+                raise ValueError({'status': status, 'message': message})
+        except ET.ParseError as e:
+            pass
+
+        zf = zipfile.ZipFile(io.BytesIO(r.content))
+        xml_data = zf.read('CORPCODE.xml')
+
+        # XML to DataFrame
+        tree = ET.XML(xml_data)
+        all_records = []
+
+        element = tree.findall('list')
+        for i, child in enumerate(element):
+            record = {}
+            for i, subchild in enumerate(child):
+                record[subchild.tag] = subchild.text
+            all_records.append(record)
+        return pd.DataFrame(all_records)
+
+
