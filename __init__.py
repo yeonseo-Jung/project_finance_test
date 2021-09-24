@@ -1,2 +1,6 @@
+import sys
+from .finstate import *
 
-__all__ = ["finstate_tables", "finstate"]
+__all__ = ['finstate_table', 'FinanceStatement']
+
+sys.modules['FinanceStatement'] = finstate.FinanceStatement
