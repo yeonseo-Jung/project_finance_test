@@ -18,11 +18,16 @@ except ImportError:
 
 # 재무제표를 종류별로 분류하여 각각 DataFrame으로 return 해주는 함수
 def finstate_classify(finstate):
+    # 재무제표 데이터가 None
     try:
         # 금액 관련 columns의 자료형을 object에서 float으로 변경
         amounts = ["thstrm_amount", "thstrm_add_amount", "frmtrm_amount", "frmtrm_q_amount", "frmtrm_add_amount"]
         for s in amounts:
-            finstate[s] = pd.to_numeric(finstate[s], errors="coerce", downcast="float")
+            # reprt_code가 11011(사업보고서)인 경우 예외처리
+            try:
+                finstate[s] = pd.to_numeric(finstate[s], errors="coerce", downcast="float")
+            except KeyError:
+                continue
 
         # BS: 재무상태표, IS: 손익계산서, CIS: 포괄손익계산서, CF: 현금흐름표, SCE: 자본변동표
         fstate_bs = pd.DataFrame(columns=finstate.columns)
@@ -45,6 +50,7 @@ def finstate_classify(finstate):
                 fstate_sce = fstate_sce.append(finstate.loc[i], ignore_index=True)
             i += 1    
         
+        # dataframe에 데이터가 할당 된 재무제표만 return
         a = [fstate_bs, fstate_is, fstate_cis, fstate_cf, fstate_sce]
         finstates = []
         for fs in a:
@@ -61,8 +67,7 @@ def finstate_classify(finstate):
 
 
 # 단일회사 분기별 전체 재무제표를 종류별로 할당해서 엑셀로 저장해주는 함수 
-def finstate_all(api_key, stock_name, stock_code, bsns_year, reprt_code, path):
-    dart = OpenDartReader(api_key)
+def finstate_all(dart, stock_name, stock_code, bsns_year, reprt_code, path):
     # dart api에서 단일회사 전체 재무제표 호출한 후 종류별로 분류해서 dataframe에 할당
     fstate = dart.finstate_all(stock_name, bsns_year, reprt_code, fs_div="CFS")
     fstates = finstate_classify(fstate)
@@ -108,7 +113,8 @@ def make_accounts(account_nm, account_id, path):
 
     # 기존에 등록되어 있는 계정과목의 id추가 
     else:
-        accounts[account_nm].append(account_id)     
+        for ac_id in account_id:
+            accounts[account_nm].append(ac_id)     
 
 
 # dart에 공시되어 있는 모든 회사들의 기업개황을 dataframe에 할당하는 함수
