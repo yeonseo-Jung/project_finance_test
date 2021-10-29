@@ -80,7 +80,7 @@ def get_finstate_quarter(stock_code):
 
     ''' 경로 탐색'''
     # 경로 탐색 
-    url = re.get('https://comp.fnguide.com/SVO2/ASP/SVD_Finance.asp?pGB=1&gicode=A044340')
+    url = re.get(f'https://comp.fnguide.com/SVO2/ASP/SVD_Finance.asp?pGB=1&gicode=A{stock_code}')
     url = url.content
 
     html = BeautifulSoup(url,'html.parser')
@@ -137,4 +137,3 @@ def get_finstate_quarter(stock_code):
     Table = Table.T
 
     return Table
-
