@@ -81,12 +81,6 @@ def finstate_all(dart, stock_name, stock_code, bsns_year, reprt_code, path):
             kind = fs.loc[0, "sj_div"]
             kind = kind.lower()
             fs.to_excel(f"{path}/{stock_code}_{kind}_{bsns_year}_{reprt_code}.xlsx")
-           
-# 저장된 엑셀파일을 읽어들여 dataframe에 할당하여 출력해주는 함수
-def read_xlsx(file_name):
-    table = pd.read_excel(f"{file_name}.xlsx")
-    table = table.drop(columns="Unnamed: 0")
-    return table
 
 
 # 새로운 계정과목 {nm: id} 등록

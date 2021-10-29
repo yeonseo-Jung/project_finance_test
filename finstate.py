@@ -32,3 +32,8 @@ class FinanceStatement:
                 finstate_table.make_accounts(ac_nm, ac_id, path)
             i += 1
 
+    # 저장된 엑셀파일을 읽어들여 dataframe에 할당하여 출력해주는 함수
+    def read_xlsx(file_name):
+        table = pd.read_excel(f"{file_name}.xlsx")
+        table = table.drop(columns="Unnamed: 0")
+        return table
