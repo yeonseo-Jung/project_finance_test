@@ -4,10 +4,10 @@ import numpy as np
 import pandas as pd
 
 # 단일회사 연간 재무제표 주요계정 및 재무비율 크롤링 함수 
-def get_finstate_annual(stock_code):
+def get_finstate_highlight_annual(stock_code):
 
     ''' 경로 탐색'''
-    url = re.get('http://comp.fnguide.com/SVO2/ASP/SVD_main.asp?pGB=1&gicode=A%s'%(stock_code))
+    url = re.get(f'http://comp.fnguide.com/SVO2/ASP/SVD_main.asp?pGB=1&gicode=A{stock_code}')
     url = url.content
 
     html = BeautifulSoup(url,'html.parser')
@@ -75,8 +75,18 @@ def get_finstate_annual(stock_code):
     return Table
 
 
-# 단일회사 연간 재무제표 주요계정 및 재무비율 크롤링 함수 
-def get_finstate_quarter(stock_code):
+# 단일회사 연간, 분기 재무제표(cis, bs, cfs) 크롤링 함수 
+def get_finstate(stock_code, finstate):
+    
+    finstate_dict = {
+        "cis_y": "divSonikY",
+        "cis_q": "divSonikQ",
+        "bs_y": "divDaechaY",
+        "bs_q": "divDaechaQ",
+        "cfs_y": "divCashY",
+        "cfs_q": "divCashQ",
+    }
+    finstate_kind = finstate_dict[finstate]
 
     ''' 경로 탐색'''
     # 경로 탐색 
@@ -87,7 +97,7 @@ def get_finstate_quarter(stock_code):
     body = html.find('body')
 
     fn_body = body.find('div',{'class':'fng_body asp_body'})
-    table = fn_body.find('div',{'id':'divSonikQ'})
+    table = fn_body.find('div',{'id':f'{finstate_kind}'})
 
     tbody = table.find('tbody')
     tr = tbody.find_all('tr')
@@ -107,9 +117,9 @@ def get_finstate_quarter(stock_code):
         '''값 가져오기'''
         value_list =[]
 
-        j = i.find_all('td',{'class':'r'})
+        values = i.find_all('td',{'class':'r'})
 
-        for value in j:
+        for value in values:
             temp = value.text.replace(',','').strip()
 
             try:
