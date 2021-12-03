@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# In[35]:
+# In[1]:
 
 
 import requests as re
@@ -15,7 +15,7 @@ import time
 from datetime import date, timedelta
 
 
-# In[39]:
+# In[2]:
 
 
 # comp.fnguide.com에서 단일회사 연간 재무제표 주요계정 및 재무비율 크롤링 함수 
@@ -90,7 +90,7 @@ def get_finstate_highlight_annual(stock_code):
     return Table
 
 
-# In[40]:
+# In[3]:
 
 
 # comp.fnguide.com에서 단일회사 연간 재무제표 주요계정 및 재무비율 크롤링 함수 
@@ -164,11 +164,11 @@ def get_finstate(stock_code, finstate_kind):
     return Table
 
 
-# In[41]:
+# In[4]:
 
 
 # comp.fnguide.com에서 연도별, 분기별 재무비율 크롤링 함수 
-def get_finstate_ratio(stock_code, kind):    # kind: annual or quarter
+def get_finance_ratio(stock_code, kind):    # kind: annual or quarter
     if kind == "annual":
         k = 0
     elif kind == "quarter":
@@ -233,14 +233,16 @@ def get_finstate_ratio(stock_code, kind):    # kind: annual or quarter
             except:
                 value_list.append(0)
 
-        Table.loc[index, columns_arr[1:]] = value_list
-
-        index += 1
+        try:
+            Table.loc[index, columns_arr[1:]] = value_list
+            index += 1
+        except ValueError:
+            pass
         
     return Table
 
 
-# In[42]:
+# In[5]:
 
 
 # 한국거래소(KRX) 웹사이트에서 전종목 정보 크롤링 함수 
@@ -297,7 +299,7 @@ def get_stock_info(market, date):    # market: kospi or kosdaq or konex    # dat
     return stock_info_df
 
 
-# In[48]:
+# In[6]:
 
 
 # 한국거래소(KRX) 웹사이트에서 보통주 정보 크롤링 함수 
@@ -344,7 +346,7 @@ def get_common_stock_info(market):    # market: kospi or kosdaq or konex
     return df_common
 
 
-# In[32]:
+# In[7]:
 
 
 # 재무제표에서 계정과목에 대한 금액 데이터 찾기 함수
@@ -352,42 +354,26 @@ def find_account(finstate, account_nm):
     i = 0
     for ac in finstate["Account"]:
         if ac == account_nm:
-            return_arr = finstate.loc[i]
+            return_data = finstate.loc[i]
             break
         
         # 일치하는 계정과목명이 없고 찾고자 하는 계정과목명이 포함된 계정과목이 존재하는 경우
         elif account_nm in ac:
             try:
-                return_arr.append(finstate.loc[i, "Account"])
+                return_data.append(finstate.loc[i, "Account"])
             except NameError:
-                return_arr = []
-                return_arr.append(finstate.loc[i, "Account"])
+                return_data = []
+                return_data.append(finstate.loc[i, "Account"])
         i += 1
     
     try:
-        return return_arr
+        return return_data
     
     except NameError:
-        print("NotFound")
+        pass
 
 
-# In[5]:
-
-
-def find_stock(df, stock_code):
-    i = 0
-    for code in df["stock_code"]:
-        if stock_code == code:
-            return_srs = df.loc[i]
-        i += 1
-        
-    try:
-        return return_srs
-    except:
-        print("NonFound")
-
-
-# In[59]:
+# In[8]:
 
 
 # 자본잠식률 구하는 함수
@@ -401,7 +387,13 @@ def get_impairment(stock_infos, finstate_kind):    # finstate_kind -> annual: bs
     while i < len(stock_infos):
         code = stock_infos.loc[i, "종목코드"]
         name = stock_infos.loc[i, "종목명"]
-        fstate_bs = get_finstate(code, finstate_kind)
+        try:
+            fstate_bs = get_finstate(code, finstate_kind)
+        # 해당 회사의 bs를 찾지 못했을 때 예외처리
+        except AttributeError:
+            i += 1
+            continue
+            
         imp_df.loc[index, ["stock_code", "stock_name"]] = [code, name]
 
         for j in range(-1, -5, -1): 
@@ -431,17 +423,98 @@ def get_impairment(stock_infos, finstate_kind):    # finstate_kind -> annual: bs
     return imp_df
 
 
-# In[69]:
+# In[9]:
 
 
-# 최근 4분기 or 4사업연도 동안 자본잠식률 = -100% 이하인 기업 추출
-def get_corp_impairment(imp_df):
-    imp_arr = []
-    i = 0
-    for imp in imp_df["impairment_ratio_0"]:
-        if imp <= -100 and imp_df.loc[i, "impairment_ratio_1"] <= -100 and imp_df.loc[i, "impairment_ratio_2"] <= -100 and imp_df.loc[i, "impairment_ratio_3"] <= -100:
-            imp_arr.append((imp_df.loc[i, "stock_code"], imp_df.loc[i, "stock_name"], imp_df.loc[i, "impairment_ratio_0"], imp_df.loc[i, "impairment_ratio_1"], imp_df.loc[i, "impairment_ratio_2"], imp_df.loc[i, "impairment_ratio_3"]))
-        i += 1    
+# 안정성 비율 구하는 함수
+def get_stable_ratio(bs, cis, finance_ratio):
+    # 수중유동성(현금성자산 / 월평균매출액): 초단기적 안정성 지표  
+    try:
+        cash = find_account(bs, "현금및현금성자산")[-1]
+        sales_mean = find_account(cis, "매출액")[1:5].mean() / 3
+        liquidity = cash / sales_mean
+    # bs 계정과목에 "현금및현금성자산" 혹은 "매출액"이 존재하지 않는다면 금융업일 가능성이 크므로 liquidity = 0으로 가정하고 넘어가자
+    except TypeError:
+        liquidity = 0
 
-    return imp_arr
+    # 당좌비율(당좌자산 / 유동부채): 단기적 안정성 지표
+    quick_ratio = find_account(finance_ratio, "당좌비율")
+
+    # 자기자본비율(자본총계 / 자산총계): 중장기적 안정성 지표
+    equity_ratio = find_account(finance_ratio, "자기자본비율")
+    
+    return liquidity, quick_ratio, equity_ratio
+
+
+# In[10]:
+
+
+# 재무적 안정성을 측정하는 함수, 안정성 기준을 통과한 회사들의 데이터만 return
+def determ_stability(stock_infos_df):
+    nonLiquidity = []
+    nonQuick = []
+    nonEquity = []
+    
+    # 시가총액 기준 내림차순 정렬
+    stock_infos_df = stock_infos_df.sort_value(by=["시가총액"], ascending=False, ignore_index=True)
+    # 최근 4사업연도 자본잠식률 구하기
+    imp_df = get_impairment(stock_infos_df, "bs_y")
+    
+    stable_corps = pd.DataFrame(columns=list(stock_infos_df.columns))
+    with tqdm(total = len(imp_df)) as pbar:
+        index = 0
+        j = 0
+        while j < len(imp_df):
+            code = imp_df.loc[j, "stock_code"]
+            name = imp_df.loc[j, "stock_name"]
+
+            bs = get_finstate(code, "bs_q")
+            cis = get_finstate(code, "cis_q")
+            fr = get_finance_ratio(code, "annual")
+            ratios = get_stable_ratio(bs, cis, fr)
+
+            pbar.update(1)
+
+            cnt = 0
+
+            # 자본잠식률 기준: -50 (%) 미만
+            for i in range(2, 6):
+                if imp_df.loc[j][i] < -50:
+                    cnt += 1
+
+
+            # 수중유동성 기준: 1.2 이상
+            liquidity = ratios[0]
+            if liquidity > 1.2:
+                cnt += 1
+            elif liquidity == 0:
+                nonLiquidity.append((code, name))
+
+            # 당좌비율 기준: 90(%) 이상
+            try:
+                for i in range(1, 5):
+                    quick_ratio = ratios[1][i] 
+                    if quick_ratio >= 90: 
+                        cnt += 1
+            except TypeError:
+                nonQuick.append((code, name))
+
+
+            # 자기자본비율 기준: 10 (%)
+            try:
+                for i in range(1, 5):
+                    equity_ratio = ratios[2][i] 
+                    if equity_ratio >= 10: 
+                        cnt += 1
+            except TypeError:
+                nonEquity.append((code, name))
+
+            # 모든 안정성 기준을 통과한 기업들의 정보를 할당
+            if cnt == 13:
+                stable_corps.loc[index] = stock_infos_df.loc[j]
+                index += 1
+
+            j += 1
+            
+    return stable_corps, nonLiquidity, nonQuick, nonEquity
 
