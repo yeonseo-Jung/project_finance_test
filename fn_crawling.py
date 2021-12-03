@@ -15,6 +15,85 @@ import time
 from datetime import date, timedelta
 
 
+# In[19]:
+
+
+# Quantiwise에서 다운받은 재무제표 엑셀 파일을 필요한 부분만 DataFrame에 할당
+def get_finstate(finstate_name):    
+    # 지정된 폴더의 절대경로로 엑셀파일 가져와서 데이터프레임에 할당하기
+    fs = pd.read_excel(f"C:\\Users\\wjddu\\Desktop\\Quantiwise\\{finstate_name}.xlsx")
+    # 기존의 bs의 컬럼을 keys, 설정하고자 하는 컬럼을 values로 하는 딕셔너리 생성
+    fs_columns = fs.loc[8].values
+    col_dict = {}
+    i = 0
+    while i < len(fs_columns):
+        col_dict[fs.columns[i]] = fs_columns[i]
+        i+= 1
+
+    # bs에서  계정코드, 이름, 금액단위, 금액 데이터만을 추출해서 컬럼을 재지정한 새로운 dataframe생성
+    fs_df = fs.loc[9:].reset_index(drop=True).rename(columns = col_dict)
+    
+    return fs_df
+
+
+# In[20]:
+
+
+# 저장된 엑셀파일을 읽어들여 dataframe에 할당하여 출력해주는 함수
+def read_xlsx(file_name):
+    table = pd.read_excel(f"{file_name}.xlsx")
+    try:
+        table = table.drop(columns="Unnamed: 0")
+    except KeyError:
+        pass 
+    return table
+
+
+# In[21]:
+
+
+accounts = {
+    # 자본
+    "A120000.IC": "자본총계", 
+    "A120010.IC": "지배주주지분(자기자본)",
+    "A120620.IC": "비지배주주지분",
+    
+    # D/E 비율, 수익성 판단
+    "M113800.IC": "이자발생부채",
+    "M111500.IC": "재고자산",
+    "M234000.IC": "재고자산증가율",
+    "M121000.IC": "매출액", 
+    "M121005.IC": "매출액(TTM)",
+    "M231000.IC": "매출액증가율(YoY)",
+    "M231100.IC": "매출액증가율(QoQ)",
+    "M121200.IC": "매출총이익",
+    "M121500.IC": "영업이익",
+    
+    # 현금흐름 -> 장래성 판단
+    "A400000.IC": "영업활동으로인한현금흐름",
+    "A402340.IC": "투자활동으로인한현금흐름",
+    # 설비투자 순액
+    "A402630.IC": "유형자산의감소",
+    "A403200.IC": "유형자산의증가",
+    "A404460.IC": "무형자산의감소",
+    "A404580.IC": "무형자산의증가",
+    "A402610.IC": "생물자산의감소",
+    "A403180.IC": "생물자산증가",
+    # 자산가치 감소액
+    "A400140.IC": "유형자산감가상각비",
+    "A400160.IC": "기타무형자산상각비",
+    "A400550.IC": "유형자산손상차손",
+    "A400570.IC": "무형자산손상차손",
+    "A401240.IC": "유형자산손상차손환입",
+    "A401250.IC": "무형자산손상차손환입",
+
+    "A400330.IC": "투자부동산처분손실",
+    "A400340.IC": "유형,리스자산처분손실",
+    "A400350.IC": "무형자산처분손실",
+    
+}
+
+
 # In[2]:
 
 
@@ -346,6 +425,24 @@ def get_common_stock_info(market):    # market: kospi or kosdaq or konex
     return df_common
 
 
+# In[26]:
+
+
+# 정확한 계정과목 코드로 데이터 찾기
+def find_account_quanti(finstate, account_code):
+    i = 0
+    for code in finstate["Account Code"]:
+        if code == account_code:
+            search_ac = finstate.loc[i]
+            break
+        i += 1
+        
+    try:
+        return search_ac
+    except:
+        pass
+
+
 # In[7]:
 
 
@@ -446,7 +543,7 @@ def get_stable_ratio(bs, cis, finance_ratio):
     return liquidity, quick_ratio, equity_ratio
 
 
-# In[10]:
+# In[11]:
 
 
 # 재무적 안정성을 측정하는 함수, 안정성 기준을 통과한 회사들의 데이터만 return
@@ -456,7 +553,7 @@ def determ_stability(stock_infos_df):
     nonEquity = []
     
     # 시가총액 기준 내림차순 정렬
-    stock_infos_df = stock_infos_df.sort_value(by=["시가총액"], ascending=False, ignore_index=True)
+    stock_infos_df = stock_infos_df.sort_values(by=["시가총액"], ascending=False, ignore_index=True)
     # 최근 4사업연도 자본잠식률 구하기
     imp_df = get_impairment(stock_infos_df, "bs_y")
     
@@ -517,4 +614,138 @@ def determ_stability(stock_infos_df):
             j += 1
             
     return stable_corps, nonLiquidity, nonQuick, nonEquity
+
+
+# In[28]:
+
+
+# 수익성 기준 충족하는지 판단하는 함수
+def profitability_corp(stock_code, stock_name, stock_infos_df):
+    bs_df = get_finstate(f"{stock_name}_bs")
+    cis_df = get_finstate(f"{stock_name}_cis")
+    cf_df = get_finstate(f"{stock_name}_cf")
+    cm_df = get_finstate(f"{stock_name}_cm")
+    
+    cnt = 0
+
+    # D/E 비율 (유이자부채 / 자기자본)
+    liability = find_account_quanti(cm_df, "M113800.IC")
+    equity = find_account_quanti(bs_df, "A120010.IC")
+    DE_ratio = liability[3:] / equity[3:]    # 1 미만 
+    # D/E 비율 기준: 1 미만 
+    if DE_ratio[-1] < 1:
+        cnt += 1
+
+    # 수익성 판단: 부가가치
+    gross_profit = find_account_quanti(cm_df, "M121200.IC")
+    operating_profit = find_account_quanti(cm_df, "M121500.IC")
+    val_add = operating_profit[3:] / gross_profit[3:]
+    # 수익성 판단 기준: 부가가치 / 영업이익 비율 0.2 이상
+    c = 0
+    for val in val_add:
+        if val >= 0.2:
+            c += 1
+    if c == len(val_add):
+        cnt += 1
+
+    # 재고자산, 매출액(연율화) 추이계산
+    inventory = find_account_quanti(cm_df, "M111500.IC")[3:]
+    sales_annual = find_account_quanti(cm_df, "M121005.IC")[3:]    
+    # 분기별 재고자산, 매출액 증가율
+    inventory_increase_rate = find_account_quanti(cm_df, "M234000.IC")[3:].mean()
+    sales_increase_rate = find_account_quanti(cm_df, "M231100.IC")[3:].mean()
+    # 재고자산회전월수
+    Inventory_turnover_month = inventory / sales_annual * 12
+    Inventory_turnover_month_mean = Inventory_turnover_month.mean()
+
+    # 매출액 조건: 연평균 매출액 200억 이상 & 4사업연도 매출액 증가율 평균 1 이상
+    c = 0
+    for sales in sales_annual:
+        if sales >= 20000000:
+            c += 1
+    if c == len(sales_annual) and sales_increase_rate >= 1:
+        cnt += 1
+    # 재고자산회전월수 조건 1.5 미만
+    if Inventory_turnover_month_mean < 1.5:
+        cnt += 1
+        
+    corp = pd.DataFrame(columns=["종목코드", "종목명"])
+    if cnt == 4:
+        corp.loc[0] = [stock_code[1:], stock_name]
+        corp = corp.merge(stock_infos_df)
+        
+    return corp
+
+
+# In[30]:
+
+
+# test
+stock_code = "A005930"
+stock_name = "삼성전자"
+bs_df = get_finstate("삼성전자_bs")
+cis_df = get_finstate("삼성전자_cis")
+cm_df = get_finstate("삼성전자_cm")
+common_stock_infos = get_common_stock_info("kospi")
+stock_infos = get_stock_info("kospi", "20211202")
+# 보통주만 시세정보 할당 (우선주 제거하기)
+# SQL inner join; preserve the order of the left keys
+stocks = common_stock_infos.merge(stock_infos)
+
+
+# In[35]:
+
+
+corp_df = profitability_corp(stock_code, stock_name, stocks)
+
+# 기업가치 계산을 위한 데이터 수집
+
+# roe 계산 (과거데이터로 미래 roe값 예측하기)
+roe_srs = find_account_quanti(cm_df, "M211565.IC")
+roe = 0
+i = 0
+while i <= 12:
+    if i <= 4:
+        roe += roe_srs[-i-1] * 3
+    elif i <= 8:
+        roe += roe_srs[-i-1] * 2
+    else:
+        roe += roe_srs[-i-1]
+    i += 1
+roe = roe / (12 + 8 + 4)
+
+stocks_com = find_account_quanti(cm_df, "M702200.IC")[-1]    # 보통주상장주식수
+stocks_pref = find_account_quanti(cm_df, "M702300.IC")[-1]    # 우선주상장주식수
+treasury_com = find_account_quanti(cm_df, "M511000.IC")[-1]    # 보통주기말자기주식수
+treasury_pref = find_account_quanti(cm_df, "M512000.IC")[-1]    # 우선주기말자기주식수
+
+stock_num = stocks_com + stocks_pref - treasury_com - treasury_pref
+
+equity = find_account_quanti(bs_df, "A120010.IC")[-1]    # 지배주주지분(자기자본)
+
+# 할인율(r), 회사채 BBB- 5년 수익률
+url = "https://www.kisrating.co.kr/ratingsStatistics/statics_spread.do"
+resp = re.get(url)
+html = BytesIO(resp.content)
+df_r = pd.read_html(html, encoding="utf-8")[0]
+r = round(df_r.loc[10, "5년"] * 0.01, 4)
+
+# 기업가치 및 적정주가, 매도가, 매수가 계산
+w = 1
+corp_val = equity + equity * (roe - r) * (w / 1 + r - w)    # w = 초과이익 지속계수
+price_sell = (equity + equity * (roe - r) / r) / stock_num    #(w = 1)
+price_prop = (equity + equity * (roe - r) * 0.9 / (1 + r - 0.9)) / stock_num    #(w = 0.9)
+price_buy = (equity + equity * (roe - r) * 0.8 / (1 + r - 0.8)) / stock_num    #(w = 0.8)
+
+
+# In[36]:
+
+
+corp_df.loc[0, ["corp_val", "price_sell", "price_prop", "price_buy"]] = [corp_val, price_sell, price_prop, price_buy]
+
+
+# In[37]:
+
+
+corp_df
 
