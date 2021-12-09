@@ -15,43 +15,10 @@ import time
 from datetime import date, timedelta
 
 
-# In[19]:
+# In[2]:
 
 
-# Quantiwise에서 다운받은 재무제표 엑셀 파일을 필요한 부분만 DataFrame에 할당
-def get_finstate(finstate_name):    
-    # 지정된 폴더의 절대경로로 엑셀파일 가져와서 데이터프레임에 할당하기
-    fs = pd.read_excel(f"C:\\Users\\wjddu\\Desktop\\Quantiwise\\{finstate_name}.xlsx")
-    # 기존의 bs의 컬럼을 keys, 설정하고자 하는 컬럼을 values로 하는 딕셔너리 생성
-    fs_columns = fs.loc[8].values
-    col_dict = {}
-    i = 0
-    while i < len(fs_columns):
-        col_dict[fs.columns[i]] = fs_columns[i]
-        i+= 1
-
-    # bs에서  계정코드, 이름, 금액단위, 금액 데이터만을 추출해서 컬럼을 재지정한 새로운 dataframe생성
-    fs_df = fs.loc[9:].reset_index(drop=True).rename(columns = col_dict)
-    
-    return fs_df
-
-
-# In[20]:
-
-
-# 저장된 엑셀파일을 읽어들여 dataframe에 할당하여 출력해주는 함수
-def read_xlsx(file_name):
-    table = pd.read_excel(f"{file_name}.xlsx")
-    try:
-        table = table.drop(columns="Unnamed: 0")
-    except KeyError:
-        pass 
-    return table
-
-
-# In[21]:
-
-
+# Quantiwise 계정과목 코드
 accounts = {
     # 자본
     "A120000.IC": "자본총계", 
@@ -90,11 +57,18 @@ accounts = {
     "A400330.IC": "투자부동산처분손실",
     "A400340.IC": "유형,리스자산처분손실",
     "A400350.IC": "무형자산처분손실",
-    
 }
 
 
-# In[2]:
+# In[10]:
+
+
+# 웹사이트 크롤링 함수
+# corp.fnguide.com
+# data.krx.co.kr
+
+
+# In[3]:
 
 
 # comp.fnguide.com에서 단일회사 연간 재무제표 주요계정 및 재무비율 크롤링 함수 
@@ -169,7 +143,7 @@ def get_finstate_highlight_annual(stock_code):
     return Table
 
 
-# In[3]:
+# In[4]:
 
 
 # comp.fnguide.com에서 단일회사 연간 재무제표 주요계정 및 재무비율 크롤링 함수 
@@ -243,7 +217,7 @@ def get_finstate(stock_code, finstate_kind):
     return Table
 
 
-# In[4]:
+# In[6]:
 
 
 # comp.fnguide.com에서 연도별, 분기별 재무비율 크롤링 함수 
@@ -324,6 +298,33 @@ def get_finance_ratio(stock_code, kind):    # kind: annual or quarter
 # In[5]:
 
 
+# 재무제표에서 계정과목에 대한 금액 데이터 찾기 함수
+def find_account(finstate, account_nm):
+    i = 0
+    for ac in finstate["Account"]:
+        if ac == account_nm:
+            return_data = finstate.loc[i]
+            break
+        
+        # 일치하는 계정과목명이 없고 찾고자 하는 계정과목명이 포함된 계정과목이 존재하는 경우
+        elif account_nm in ac:
+            try:
+                return_data.append(finstate.loc[i, "Account"])
+            except NameError:
+                return_data = []
+                return_data.append(finstate.loc[i, "Account"])
+        i += 1
+    
+    try:
+        return return_data
+    
+    except NameError:
+        pass
+
+
+# In[7]:
+
+
 # 한국거래소(KRX) 웹사이트에서 전종목 정보 크롤링 함수 
 def get_stock_info(market, date):    # market: kospi or kosdaq or konex    # date: ex) 20211001
     # Request URL
@@ -378,7 +379,7 @@ def get_stock_info(market, date):    # market: kospi or kosdaq or konex    # dat
     return stock_info_df
 
 
-# In[6]:
+# In[8]:
 
 
 # 한국거래소(KRX) 웹사이트에서 보통주 정보 크롤링 함수 
@@ -425,7 +426,47 @@ def get_common_stock_info(market):    # market: kospi or kosdaq or konex
     return df_common
 
 
-# In[26]:
+# In[11]:
+
+
+# Quantiwise 데이터 출력 함수
+
+
+# In[12]:
+
+
+# 저장된 엑셀파일을 읽어들여 dataframe에 할당하여 출력해주는 함수
+def read_xlsx(file_name):
+    table = pd.read_excel(f"{file_name}.xlsx")
+    try:
+        table = table.drop(columns="Unnamed: 0")
+    except KeyError:
+        pass 
+    return table
+
+
+# In[13]:
+
+
+# Quantiwise에서 다운받은 재무제표 엑셀 파일을 필요한 부분만 DataFrame에 할당
+def get_finstate_quanti(finstate_name):    
+    # 지정된 폴더의 절대경로로 엑셀파일 가져와서 데이터프레임에 할당하기
+    fs = pd.read_excel(f"C:\\Users\\wjddu\\Desktop\\Quantiwise\\{finstate_name}.xlsx")
+    # 기존의 bs의 컬럼을 keys, 설정하고자 하는 컬럼을 values로 하는 딕셔너리 생성
+    fs_columns = fs.loc[8].values
+    col_dict = {}
+    i = 0
+    while i < len(fs_columns):
+        col_dict[fs.columns[i]] = fs_columns[i]
+        i += 1
+
+    # bs에서  계정코드, 이름, 금액단위, 금액 데이터만을 추출해서 컬럼을 재지정한 새로운 dataframe생성
+    fs_df = fs.loc[9:].reset_index(drop=True).rename(columns = col_dict)
+    
+    return fs_df
+
+
+# In[14]:
 
 
 # 정확한 계정과목 코드로 데이터 찾기
@@ -443,34 +484,14 @@ def find_account_quanti(finstate, account_code):
         pass
 
 
-# In[7]:
+# In[15]:
 
 
-# 재무제표에서 계정과목에 대한 금액 데이터 찾기 함수
-def find_account(finstate, account_nm):
-    i = 0
-    for ac in finstate["Account"]:
-        if ac == account_nm:
-            return_data = finstate.loc[i]
-            break
-        
-        # 일치하는 계정과목명이 없고 찾고자 하는 계정과목명이 포함된 계정과목이 존재하는 경우
-        elif account_nm in ac:
-            try:
-                return_data.append(finstate.loc[i, "Account"])
-            except NameError:
-                return_data = []
-                return_data.append(finstate.loc[i, "Account"])
-        i += 1
-    
-    try:
-        return return_data
-    
-    except NameError:
-        pass
+# 안정성 및 수익성 기준을 구하는 함수
+# 기준을 충족하는지 판단하는 함수
 
 
-# In[8]:
+# In[34]:
 
 
 # 자본잠식률 구하는 함수
@@ -478,7 +499,7 @@ def get_impairment(stock_infos, finstate_kind):    # finstate_kind -> annual: bs
     
     noneType_arr = []
     zeroCapital_arr = []
-    imp_df = pd.DataFrame(columns=["stock_code", "stock_name", "impairment_ratio_0", "impairment_ratio_1", "impairment_ratio_2", "impairment_ratio_3"])
+    imp_df = pd.DataFrame(columns=["종목코드", "종목명", "impairment_ratio_0", "impairment_ratio_1", "impairment_ratio_2", "impairment_ratio_3"])
     i = 0
     index = 0
     while i < len(stock_infos):
@@ -491,7 +512,7 @@ def get_impairment(stock_infos, finstate_kind):    # finstate_kind -> annual: bs
             i += 1
             continue
             
-        imp_df.loc[index, ["stock_code", "stock_name"]] = [code, name]
+        imp_df.loc[index, ["종목코드", "종목명"]] = [code, name]
 
         for j in range(-1, -5, -1): 
             try:
@@ -520,7 +541,7 @@ def get_impairment(stock_infos, finstate_kind):    # finstate_kind -> annual: bs
     return imp_df
 
 
-# In[9]:
+# In[35]:
 
 
 # 안정성 비율 구하는 함수
@@ -543,7 +564,7 @@ def get_stable_ratio(bs, cis, finance_ratio):
     return liquidity, quick_ratio, equity_ratio
 
 
-# In[11]:
+# In[43]:
 
 
 # 재무적 안정성을 측정하는 함수, 안정성 기준을 통과한 회사들의 데이터만 return
@@ -552,18 +573,16 @@ def determ_stability(stock_infos_df):
     nonQuick = []
     nonEquity = []
     
-    # 시가총액 기준 내림차순 정렬
-    stock_infos_df = stock_infos_df.sort_values(by=["시가총액"], ascending=False, ignore_index=True)
     # 최근 4사업연도 자본잠식률 구하기
     imp_df = get_impairment(stock_infos_df, "bs_y")
     
-    stable_corps = pd.DataFrame(columns=list(stock_infos_df.columns))
+    stable_corps = pd.DataFrame(columns=["종목코드", "종목명"])
     with tqdm(total = len(imp_df)) as pbar:
         index = 0
         j = 0
         while j < len(imp_df):
-            code = imp_df.loc[j, "stock_code"]
-            name = imp_df.loc[j, "stock_name"]
+            code = imp_df.loc[j, "종목코드"]
+            name = imp_df.loc[j, "종목명"]
 
             bs = get_finstate(code, "bs_q")
             cis = get_finstate(code, "cis_q")
@@ -608,23 +627,25 @@ def determ_stability(stock_infos_df):
 
             # 모든 안정성 기준을 통과한 기업들의 정보를 할당
             if cnt == 13:
-                stable_corps.loc[index] = stock_infos_df.loc[j]
+                stable_corps.loc[index] = imp_df.loc[j, ["종목코드", "종목명"]]
                 index += 1
 
             j += 1
-            
+    # stable_corps 데이터를 기준으로 stock_infos_df의 데이터 가져오기 위해 merge (SQL inner join; preserve the order of the left keys)    
+    stable_corps = stable_corps.merge(stock_infos_df)
+    
     return stable_corps, nonLiquidity, nonQuick, nonEquity
 
 
-# In[28]:
+# In[37]:
 
 
 # 수익성 기준 충족하는지 판단하는 함수
-def profitability_corp(stock_code, stock_name, stock_infos_df):
-    bs_df = get_finstate(f"{stock_name}_bs")
-    cis_df = get_finstate(f"{stock_name}_cis")
-    cf_df = get_finstate(f"{stock_name}_cf")
-    cm_df = get_finstate(f"{stock_name}_cm")
+def get_profitability_corp(stock_code, stock_name, stock_infos_df):
+    bs_df = get_finstate_quanti(f"{stock_name}_bs")
+    cis_df = get_finstate_quanti(f"{stock_name}_cis")
+    cf_df = get_finstate_quanti(f"{stock_name}_cf")
+    cm_df = get_finstate_quanti(f"{stock_name}_cm")
     
     cnt = 0
 
@@ -677,26 +698,31 @@ def profitability_corp(stock_code, stock_name, stock_infos_df):
     return corp
 
 
-# In[30]:
+# In[44]:
 
 
-# test
-stock_code = "A005930"
-stock_name = "삼성전자"
-bs_df = get_finstate("삼성전자_bs")
-cis_df = get_finstate("삼성전자_cis")
-cm_df = get_finstate("삼성전자_cm")
+# kospi 시가총액 상위 100개 기업 대상 분석 
 common_stock_infos = get_common_stock_info("kospi")
 stock_infos = get_stock_info("kospi", "20211202")
 # 보통주만 시세정보 할당 (우선주 제거하기)
 # SQL inner join; preserve the order of the left keys
 stocks = common_stock_infos.merge(stock_infos)
+# 시가총액 기준 내림차순 정렬
+stocks = stocks.sort_values(by=["시가총액"], ascending=False, ignore_index=True)
+stb_corps = determ_stability(stocks.loc[0:99])
 
 
-# In[35]:
+# In[46]:
 
 
-corp_df = profitability_corp(stock_code, stock_name, stocks)
+# test: 삼성전자
+stock_code = "A005930"
+stock_name = "삼성전자"
+bs_df = get_finstate_quanti("삼성전자_bs")
+cis_df = get_finstate_quanti("삼성전자_cis")
+cm_df = get_finstate_quanti("삼성전자_cm")
+
+corp_df = get_profitability_corp(stock_code, stock_name, stocks)
 
 # 기업가치 계산을 위한 데이터 수집
 
@@ -710,20 +736,21 @@ while i <= 12:
     elif i <= 8:
         roe += roe_srs[-i-1] * 2
     else:
-        roe += roe_srs[-i-1]
+        roe += roe_srs[-i-1] * 1
     i += 1
-roe = roe / (12 + 8 + 4)
+roe = roe / (12 + 8 + 4) / 100
 
-stocks_com = find_account_quanti(cm_df, "M702200.IC")[-1]    # 보통주상장주식수
+stocks_com = find_account_quanti(cm_df, "M702200.IC")[-1]     # 보통주상장주식수
 stocks_pref = find_account_quanti(cm_df, "M702300.IC")[-1]    # 우선주상장주식수
-treasury_com = find_account_quanti(cm_df, "M511000.IC")[-1]    # 보통주기말자기주식수
-treasury_pref = find_account_quanti(cm_df, "M512000.IC")[-1]    # 우선주기말자기주식수
+treasury_com = find_account_quanti(cm_df, "M511000.IC")[-1]   # 보통주기말자기주식수
+treasury_pref = find_account_quanti(cm_df, "M512000.IC")[-1]  # 우선주기말자기주식수
 
-stock_num = stocks_com + stocks_pref - treasury_com - treasury_pref
+stock_num = stocks_com  - treasury_com - treasury_pref
 
-equity = find_account_quanti(bs_df, "A120010.IC")[-1]    # 지배주주지분(자기자본)
+equity = find_account_quanti(bs_df, "A120010.IC")[-1] * 1000    # 지배주주지분(자기자본)
 
 # 할인율(r), 회사채 BBB- 5년 수익률
+# kisrating.co.kr (한국신용평가) 에서 크롤링 
 url = "https://www.kisrating.co.kr/ratingsStatistics/statics_spread.do"
 resp = re.get(url)
 html = BytesIO(resp.content)
@@ -733,19 +760,9 @@ r = round(df_r.loc[10, "5년"] * 0.01, 4)
 # 기업가치 및 적정주가, 매도가, 매수가 계산
 w = 1
 corp_val = equity + equity * (roe - r) * (w / 1 + r - w)    # w = 초과이익 지속계수
-price_sell = (equity + equity * (roe - r) / r) / stock_num    #(w = 1)
-price_prop = (equity + equity * (roe - r) * 0.9 / (1 + r - 0.9)) / stock_num    #(w = 0.9)
-price_buy = (equity + equity * (roe - r) * 0.8 / (1 + r - 0.8)) / stock_num    #(w = 0.8)
-
-
-# In[36]:
-
+price_sell = (equity + (equity * (roe - r)) / r) / stock_num    # (w = 1)
+price_prop = (equity + (equity * (roe - r)) * 0.9 / (1 + r - 0.9)) / stock_num    # (w = 0.9)
+price_buy = (equity + (equity * (roe - r)) * 0.8 / (1 + r - 0.8)) / stock_num    # (w = 0.8)
 
 corp_df.loc[0, ["corp_val", "price_sell", "price_prop", "price_buy"]] = [corp_val, price_sell, price_prop, price_buy]
-
-
-# In[37]:
-
-
-corp_df
 
